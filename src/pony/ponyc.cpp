@@ -197,6 +197,55 @@ int dumpToken() {
    *  Write your code here.
    *
    */
+  while (true) {
+    Token tok = lexer.getCurToken();
+
+    if (tok == tok_eof) {
+      llvm::outs() << "EOF\n";
+      break;
+    }
+
+    switch (tok) {
+      case tok_return:
+      // 关键字统一按小写标准形式输出。
+        llvm::outs() << "return ";
+        break;
+
+      case tok_def:
+        llvm::outs() << "def ";
+        break;
+
+      case tok_var:
+        llvm::outs() << "var ";
+        break;
+
+      case tok_identifier:
+      // 标识符输出其原始名称。
+        llvm::outs() << lexer.getId() << " ";
+        break;
+
+      case tok_number: {
+      // 数字输出其数值。
+        double val = lexer.getValue();
+        long long intVal = static_cast<long long>(val);
+
+        if (val == static_cast<double>(intVal))
+          llvm::outs() << intVal << " ";
+        else
+          llvm::outs() << val << " ";
+
+        break;
+      }
+
+      default:
+      // 其它 token 是普通 ASCII 符号：
+        llvm::outs() << static_cast<char>(tok) << " ";
+        break;
+    }
+
+  // 读取下一个 token
+    lexer.getNextToken();
+  }
     while (true) {
       Token tok = lexer.getCurToken();
 

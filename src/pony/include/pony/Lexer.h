@@ -1,5 +1,5 @@
 //===- Lexer.h - Lexer for the Pony language 
--------------------------------===//
+//-------------------------------===//
 
 #ifndef PONY_LEXER_H
 #define PONY_LEXER_H
@@ -103,6 +103,31 @@ class Lexer {
      *  Write your code here.
      *
      */
+    // 当前行缓冲区为空，说明上一行已经读完，需要读取下一行。
+  if (curLineBuffer.empty()) {
+    curLineBuffer = readNextLine();
+
+    // readNextLine() 返回空串表示已经到达文件末尾。
+    // 此时返回 EOF，让 getTok() 后续生成 tok_eof。
+    if (curLineBuffer.empty())
+      return EOF;
+
+    // 成功读到新行，行号加一。
+    ++curLineNum;
+
+    // 新行开始时列号归零。
+    curCol = 0;
+  }
+
+  // 取出当前行缓冲区的第一个字符。
+  char nextChar = curLineBuffer.front();
+
+  // 消费这个字符，把缓冲区向后移动一位。
+  curLineBuffer = curLineBuffer.drop_front();
+
+  // 每读一个字符，列号加一。
+  ++curCol;
+  return static_cast<unsigned char>(nextChar);
     // ======== Part 1 modified begin ========
     if (curLineBuffer.empty()) {
       curLineBuffer = readNextLine();
@@ -150,6 +175,33 @@ class Lexer {
      *  Write your code here.
      *
      */
+    // 识别关键字或标识符。
+    // 标识符必须以字母或下划线开头。
+  if ((lastChar != tok_eof &&
+      isalpha(static_cast<unsigned char>(lastChar))) ||
+      lastChar == '_') {
+    identifierStr.clear();
+
+    // 标识符后续字符可以是字母、数字或下划线。
+    do {
+      identifierStr += static_cast<char>(lastChar);
+      lastChar = Token(getNextChar());
+    } while ((lastChar != tok_eof &&
+              isalnum(static_cast<unsigned char>(lastChar))) ||
+            lastChar == '_');
+
+    // 关键字大小写不敏感。
+    std::string lowerStr = identifierStr;
+    for (char &c : lowerStr)
+      c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+
+    if (lowerStr == "return") return tok_return;
+    if (lowerStr == "def") return tok_def;
+    if (lowerStr == "var") return tok_var;
+
+    // 不是关键字，就返回普通标识符。
+    return tok_identifier;
+  }
     // ======== Part 1 modified begin ========
     if ((lastChar != tok_eof &&
          isalpha(static_cast<unsigned char>(lastChar))) ||
@@ -182,63 +234,46 @@ class Lexer {
         lastChar == '.') {
       // ======== Part 1 modified begin ========
       std::string numStr;
-      bool valid = true;
-
-      if (lastChar == '.') {
-        valid = false;
+      while (lastChar != tok_eof &&
+            (isalnum(static_cast<unsigned char>(lastChar)) || lastChar == '.')) {
         numStr += static_cast<char>(lastChar);
         lastChar = Token(getNextChar());
-      } else {
-        while (lastChar != tok_eof &&
-               isdigit(static_cast<unsigned char>(lastChar))) {
-          numStr += static_cast<char>(lastChar);
-          lastChar = Token(getNextChar());
-        }
-
-        if (lastChar == '.') {
-          numStr += '.';
-          lastChar = Token(getNextChar());
-
-          if (lastChar == tok_eof ||
-              !isdigit(static_cast<unsigned char>(lastChar))) {
-            valid = false;
-          } else {
-            while (lastChar != tok_eof &&
-                   isdigit(static_cast<unsigned char>(lastChar))) {
-              numStr += static_cast<char>(lastChar);
-              lastChar = Token(getNextChar());
-            }
-          }
-        }
-
-        if (lastChar == '.') {
-          valid = false;
-          while (lastChar == '.' ||
-                 (lastChar != tok_eof &&
-                  isdigit(static_cast<unsigned char>(lastChar)))) {
-            numStr += static_cast<char>(lastChar);
-            lastChar = Token(getNextChar());
-          }
-        }
       }
 
-      if (lastChar == 'e' || lastChar == 'E') {
+      bool valid = true;
+      int dotCount = 0;
+
+// 合法数字必须以数字开头。
+      if (numStr.empty() ||
+          !isdigit(static_cast<unsigned char>(numStr.front()))) {
         valid = false;
-        do {
-          numStr += static_cast<char>(lastChar);
-          lastChar = Token(getNextChar());
-        } while ((lastChar != tok_eof &&
-                  isalnum(static_cast<unsigned char>(lastChar))) ||
-                 lastChar == '.');
       }
+
+      for (char c : numStr) {
+        if (c == '.') {
+          ++dotCount;
+       } else if (!isdigit(static_cast<unsigned char>(c))) {
+    // 当前语言不支持科学计数法，也不支持数字中混入字母。
+          valid = false;
+        }
+      }
+
+// 小数点最多只能出现一次。
+      if (dotCount > 1)
+        valid = false;
+
+// 小数点不能出现在最后。
+      if (!numStr.empty() && numStr.back() == '.')
+        valid = false;
 
       if (!valid) {
         llvm::errs() << "Lexical error: invalid number \"" << numStr
-                     << "\" at line " << lastLocation.line
-                     << ", col " << lastLocation.col << "\n";
+                    << "\" at line " << lastLocation.line
+                    << ", col " << lastLocation.col << "\n";
         return tok_eof;
       }
 
+// 合法数字转换成 double，供 getValue() 返回。
       numVal = strtod(numStr.c_str(), nullptr);
       return tok_number;
       // ======== Part 1 modified end ========
